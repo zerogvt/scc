@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -34,13 +35,18 @@ func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	var i, pi int
 	if offset != 0 {
-		// provider index
-		pi = len(a.Config) % offset
+		if offset <= len(a.Config) {
+			pi = len(a.Config) - offset
+		} else {
+			pi = offset % len(a.Config)
+		}
 	}
+	fmt.Println(pi)
 	news := []*ContentItem{}
 	for i = 0; i < count; i++ {
 		items := []*ContentItem{}
 		prov := a.Config[pi]
+		fmt.Println(prov)
 		if items, err = a.ContentClients[prov.Type].GetContent("todo_ip", 1); err != nil {
 			if items, err = a.ContentClients[*prov.Fallback].GetContent("todo_ip", 1); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -50,7 +56,7 @@ func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 		news = append(news, items...)
-		pi = len(a.Config) % (pi + 1)
+		pi = (pi + 1) % len(a.Config)
 	}
 	builder := strings.Builder{}
 	for _, n := range news {
