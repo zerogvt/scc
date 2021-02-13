@@ -41,20 +41,24 @@ func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			pi = offset % len(a.Config)
 		}
 	}
-	fmt.Println(pi)
 	news := []*ContentItem{}
 	for i = 0; i < count; i++ {
 		items := []*ContentItem{}
 		prov := a.Config[pi]
-		fmt.Println(prov)
+		fmt.Println(prov.Type)
+		fmt.Println(count)
+		fmt.Println(pi)
+		fmt.Println(len(a.Config))
 		if items, err = a.ContentClients[prov.Type].GetContent("todo_ip", 1); err != nil {
 			if items, err = a.ContentClients[*prov.Fallback].GetContent("todo_ip", 1); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				//TODO
 				w.Write([]byte("todo_write_so_far"))
+				fmt.Println("oooooooooooo")
 				return
 			}
 		}
+		fmt.Println(items)
 		news = append(news, items...)
 		pi = (pi + 1) % len(a.Config)
 	}
