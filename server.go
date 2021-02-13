@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -33,32 +32,39 @@ func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	var i, pi int
-	if offset != 0 {
-		if offset <= len(a.Config) {
-			pi = len(a.Config) - offset
-		} else {
-			pi = offset % len(a.Config)
-		}
-	}
-	news := []*ContentItem{}
-	for i = 0; i < count; i++ {
-		items := []*ContentItem{}
-		prov := a.Config[pi]
-		fmt.Println(prov.Type)
-		fmt.Println(count)
-		fmt.Println(pi)
-		fmt.Println(len(a.Config))
-		if items, err = a.ContentClients[prov.Type].GetContent("todo_ip", 1); err != nil {
-			if items, err = a.ContentClients[*prov.Fallback].GetContent("todo_ip", 1); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				//TODO
-				w.Write([]byte("todo_write_so_far"))
-				fmt.Println("oooooooooooo")
-				return
+	// make a channel for each content Provider
+	chans := make([]chan []*ContentItem, len(a.Config))
+	for i, cfg := range a.Config {
+		c := make(chan []*ContentItem)
+		chans[i] = c
+		// and start goroutines to constantly pull from providers
+		go func(c chan []*ContentItem, cfg ContentConfig) {
+			for {
+				items := []*ContentItem{}
+				if items, err = a.ContentClients[cfg.Type].GetContent("todo_ip", 1); err != nil {
+					if a.ContentClients[*cfg.Fallback] == nil {
+						close(c)
+						return
+					}
+					if items, err = a.ContentClients[*cfg.Fallback].GetContent("todo_ip", 1); err != nil {
+						close(c)
+						return
+					}
+				}
+				c <- items
 			}
+		}(c, cfg)
+	}
+	// provider index
+	pi := offset % len(a.Config)
+	news := []*ContentItem{}
+	for i := 0; i < count; i++ {
+		items, ok := <-chans[pi]
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			// todo write results so far
+			return
 		}
-		fmt.Println(items)
 		news = append(news, items...)
 		pi = (pi + 1) % len(a.Config)
 	}
