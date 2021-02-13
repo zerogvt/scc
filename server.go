@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -17,25 +17,30 @@ type App struct {
 
 func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Printf("%s %s", req.Method, req.URL.String())
-	var i, count, offset, provnum int64
-	var err error
-	params := req.URL.Query()
-	fmt.Println(params)
-	if count, err = strconv.ParseInt(params.Get("count"), 0, 64); err != nil {
+	m, err := url.ParseQuery(req.URL.RawQuery)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if offset, err = strconv.ParseInt(params.Get("offset"), 0, 64); err != nil {
+	count, err := strconv.Atoi(m["count"][0])
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	offset, err := strconv.Atoi(m["offset"][0])
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var i, pi int
 	if offset != 0 {
-		provnum = int64(len(a.Config)) % offset
+		// provider index
+		pi = len(a.Config) % offset
 	}
 	news := []*ContentItem{}
 	for i = 0; i < count; i++ {
 		items := []*ContentItem{}
-		prov := a.Config[provnum]
+		prov := a.Config[pi]
 		if items, err = a.ContentClients[prov.Type].GetContent("todo_ip", 1); err != nil {
 			if items, err = a.ContentClients[*prov.Fallback].GetContent("todo_ip", 1); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -45,7 +50,7 @@ func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 		news = append(news, items...)
-		provnum = int64(len(a.Config)) % (provnum + 1)
+		pi = len(a.Config) % (pi + 1)
 	}
 	builder := strings.Builder{}
 	for _, n := range news {
@@ -54,6 +59,6 @@ func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}
-	w.Write([]byte(builder.String()))
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(builder.String()))
 }
