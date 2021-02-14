@@ -1,11 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
 // App represents the server's internal state.
@@ -17,6 +17,9 @@ type App struct {
 
 func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Printf("%s %s", req.Method, req.URL.String())
+	// this needs to precede any call to WriteHeader or Write
+	// as per https://golang.org/pkg/net/http/#ResponseWriter
+	w.Header().Set("Content-Type", "application/json")
 	m, err := url.ParseQuery(req.URL.RawQuery)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -68,13 +71,14 @@ func (a App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		news = append(news, items...)
 		pi = (pi + 1) % len(a.Config)
 	}
-	builder := strings.Builder{}
-	for _, n := range news {
-		if _, err = builder.WriteString(n.Source + " "); err != nil {
-			w.Write([]byte(builder.String()))
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+	body, err := json.Marshal(news)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(builder.String()))
+	if _, err := w.Write(body); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
