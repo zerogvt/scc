@@ -86,9 +86,9 @@ func getParams(r *http.Request) (int, int, error) {
 	}
 	if _, ok := v["count"]; ok {
 		count, err = strconv.Atoi(v["count"][0])
-	}
-	if err != nil {
-		return count, offset, err
+		if err != nil {
+			return count, offset, err
+		}
 	}
 	if _, ok := v["offset"]; ok {
 		offset, err = strconv.Atoi(v["offset"][0])
