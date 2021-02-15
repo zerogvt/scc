@@ -17,8 +17,13 @@ func (ErrProvider) GetContent(userIP string, count int) ([]*ContentItem, error) 
 }
 
 var (
-	SimpleContentRequest = httptest.NewRequest("GET", "/?offset=0&count=5", nil)
-	OffsetContentRequest = httptest.NewRequest("GET", "/?offset=5&count=5", nil)
+	SimpleContentRequest    = httptest.NewRequest("GET", "/?offset=0&count=5", nil)
+	OffsetContentRequest    = httptest.NewRequest("GET", "/?offset=5&count=5", nil)
+	NoOffestContentRequest  = httptest.NewRequest("GET", "/?count=5", nil)
+	NoCountContentRequest   = httptest.NewRequest("GET", "/?offset=5", nil)
+	NoParamsContentRequest  = httptest.NewRequest("GET", "/?offset=5", nil)
+	BadCountContentRequest  = httptest.NewRequest("GET", "/?count=bad", nil)
+	BadOffsetContentRequest = httptest.NewRequest("GET", "/?offset=bad", nil)
 )
 
 func runRequest(t *testing.T, srv http.Handler, r *http.Request) (content []*ContentItem) {
@@ -48,19 +53,50 @@ func TestResponseCount(t *testing.T) {
 
 }
 
-func TestResponseOrder(t *testing.T) {
-	content := runRequest(t, app, SimpleContentRequest)
+func TestBadParams(t *testing.T) {
+	response := httptest.NewRecorder()
+	reqs := []*http.Request{BadCountContentRequest, BadOffsetContentRequest}
+	for _, req := range reqs {
+		app.ServeHTTP(response, req)
 
-	if len(content) != 5 {
-		t.Fatalf("Got %d items back, want 5", len(content))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("Response code is %d, want %d", response.Code, http.StatusBadRequest)
+			return
+		}
+	}
+}
+
+func TestResponseCountNoCount(t *testing.T) {
+	content := runRequest(t, app, NoCountContentRequest)
+
+	if len(content) != 0 {
+		t.Fatalf("Got %d items back, want 0", len(content))
 	}
 
-	for i, item := range content {
-		if Provider(item.Source) != DefaultConfig[i%len(DefaultConfig)].Type {
-			t.Errorf(
-				"Position %d: Got Provider %v instead of Provider %v",
-				i, item.Source, DefaultConfig[i].Type,
-			)
+	content2 := runRequest(t, app, NoParamsContentRequest)
+
+	if len(content2) != 0 {
+		t.Fatalf("Got %d items back, want 0", len(content))
+	}
+
+}
+
+func TestResponseOrder(t *testing.T) {
+	reqs := []*http.Request{SimpleContentRequest, NoOffestContentRequest}
+	for _, req := range reqs {
+		content := runRequest(t, app, req)
+
+		if len(content) != 5 {
+			t.Fatalf("Got %d items back, want 5", len(content))
+		}
+
+		for i, item := range content {
+			if Provider(item.Source) != DefaultConfig[i%len(DefaultConfig)].Type {
+				t.Errorf(
+					"Position %d: Got Provider %v instead of Provider %v",
+					i, item.Source, DefaultConfig[i].Type,
+				)
+			}
 		}
 	}
 }
@@ -127,7 +163,7 @@ func TestProviderError(t *testing.T) {
 		Config: cfg,
 	}
 	// Now we should halt on config2 since both primary and fallback are set to fail
-	// note: config3 should be ok due to fallback
+	// note: config3 should be ok due to fallback provider 1
 	content := runRequest(t, errapp, SimpleContentRequest)
 
 	if len(content) != 3 {
